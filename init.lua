@@ -1,19 +1,14 @@
-local clientkeys = clientkeys
 local client = client
 local mouse = mouse
 local pairs = pairs
 local ipairs = ipairs
 local type = type
-local table = table
 local screen = screen
 local tags = tags
 local tag = tag
 local layouts = config.layouts
-local awful = awful
-local rules = awful.rules.rules
-local match = awful.rules.match
-local naughty = require('naughty')
-local beautiful = require('beautiful')
+local awful = require('awful')
+awful.rules = require('awful.rules')
 module('dyno')
 
 -- This can be a tag name (string) or tag object or false for auto-generated tag names
@@ -41,8 +36,8 @@ function retag(c)
 	local newtags = {}
 	local selected = {}
 	-- check awful.rules.rules to see if anything matches
-	for _, r in ipairs(rules) do
-		if r.properties.tagname and match(c, r.rule) then
+	for _, r in ipairs(awful.rules.rules) do
+		if r.properties.tagname and awful.rules.match(c, r.rule) then
 			newtags[#newtags + 1] = r.properties.tagname
 			if r.properties.switchtotag then
 				selected[r.properties.tagname] = true
@@ -53,17 +48,14 @@ function retag(c)
 	-- if no tagnames specified
 	if #newtags == 0 then
 		if fallback then
-			if type(fallback) == 'string' then
-				newtags = { fallback }
-			elseif type(fallback) == 'tag' then
-				newtags = { fallback }
-			end
+			newtags = { fallback }
 		else
 			newtags = { c.class:lower() }
 		end
 	end
 
 	local visible = {}
+	-- go through newtags table and replace strings with tag objects
 	for i, name in ipairs(newtags) do
 		for _, t in ipairs(tags) do
 			if t.name == name then
@@ -135,7 +127,7 @@ end
 
 client.add_signal("unmanage", cleanup)
 
---{{{ del : delete a tag. Taken directly from the shifty sources
+--{{{ del : delete a tag. Taken almost directly from the shifty sources
 --@param tag : the tag to be deleted [current tag]
 function del(tag, idx)
   local scr = get_screen(tag)
