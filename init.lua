@@ -110,7 +110,11 @@ function maketag( name, s )
 end
 
 client.add_signal("manage", retag)
--- client.add_signal("property::name", retag)
+
+-- Uncomment this to have dyno retag windows when their name changes (can be useful for retagging terminals when you are using them for different tasks)
+client.add_signal("manage", function(c)
+	c:add_signal("property::name", retag)
+end)
 
 function cleanup(c)
 	local tags = tags[c.screen]
@@ -140,14 +144,14 @@ end
 
 client.add_signal("unmanage", cleanup)
 
---{{{ del : delete a tag. Taken almost directly from the shifty sources
---@param tag : the tag to be deleted [current tag]
 function del(t)
   -- return if tag not empty (except sticky)
   local clients = t:clients()
 	if #clients > 0 then
   	for i, c in ipairs(clients) do
-    	if not c.sticky then do return false end end
+    	if not c.sticky then 
+				do return false end 
+			end
   	end
 	end
 
@@ -155,4 +159,3 @@ function del(t)
   t.screen = nil
 	return true
 end
---}}}
