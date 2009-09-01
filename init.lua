@@ -125,10 +125,9 @@ function cleanup(c)
 	-- If we need to renumber the tags
 	local r = 0
 	for _, i in ipairs(removed) do
-		for n = i, #tags do
+		for n = i - r, #tags do
 			tags[n] = tags[n + 1]
 		end
-		print(#tags)
 		tags[#tags - r] = nil
 		r = r + 1
 	end
