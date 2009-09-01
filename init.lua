@@ -16,6 +16,9 @@ local print = print
 
 module('dyno')
 
+-- Whether or not to use an "all" tag as a sort of faux Expose effect
+all_tag = true
+
 -- This can be a tag name (string) or tag object or false for auto-generated tag names
 fallback = false
 
@@ -35,7 +38,6 @@ local function get_screen(obj)
 end
 
 function retag(c)
-	print("Retagging client: " .. c.class )
 	local s = get_screen(c)
 	local tags = tags[s]
 	local newtags = {}
@@ -49,6 +51,10 @@ function retag(c)
 				selected[r.properties.tagname] = true
 			end
 		end
+	end
+
+	if #newtags == 1 and newtags[1] == 'any' then
+		do return end
 	end
 
 	-- if no tagnames specified
@@ -66,9 +72,8 @@ function retag(c)
 				break
 			end
 		end
-		if type(newtags[i]) == 'string' then
+		if type(newtags[i]) == 'string' and newtags[i] ~= 'any' then
 			newtags[i] = maketag( name, s )
-			print("Created new tag #"..i..": "..tostring(newtags[i]))
 			if not selected[name] and show_new_tags then
 				vtags[#vtags + 1] = newtags[i]
 			end
