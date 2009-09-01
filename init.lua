@@ -8,7 +8,12 @@ local tags = tags
 local tag = tag
 local layouts = config.layouts
 local awful = require('awful')
-awful.rules = require('awful.rules')
+require('awful.rules')
+
+-- These are for debugging, to be removed
+local tostring = tostring
+local print = print
+
 module('dyno')
 
 -- This can be a tag name (string) or tag object or false for auto-generated tag names
@@ -30,11 +35,12 @@ local function get_screen(obj)
 end
 
 function retag(c)
+	print("Retagging client: " .. c.class )
 	local s = get_screen(c)
-
 	local tags = tags[s]
 	local newtags = {}
 	local selected = {}
+	
 	-- check awful.rules.rules to see if anything matches
 	for _, r in ipairs(awful.rules.rules) do
 		if r.properties.tagname and awful.rules.match(c, r.rule) then
@@ -47,14 +53,11 @@ function retag(c)
 
 	-- if no tagnames specified
 	if #newtags == 0 then
-		if fallback then
-			newtags = { fallback }
-		else
-			newtags = { c.class:lower() }
-		end
+		if fallback then newtags = { fallback }
+		else newtags = { c.class:lower() } end
 	end
 
-	local visible = {}
+	local vtags = {}
 	-- go through newtags table and replace strings with tag objects
 	for i, name in ipairs(newtags) do
 		for _, t in ipairs(tags) do
@@ -65,54 +68,40 @@ function retag(c)
 		end
 		if type(newtags[i]) == 'string' then
 			newtags[i] = maketag( name, s )
+			print("Created new tag #"..i..": "..tostring(newtags[i]))
 			if not selected[name] and show_new_tags then
-				visible[#visible + 1] = newtags[i]
+				vtags[#vtags + 1] = newtags[i]
 			end
 		end
-		if selected[name] ~= nil then visible[#visible + 1] = newtags[i] end
+		if selected[name] ~= nil then vtags[#vtags + 1] = newtags[i] end
 	end
 	c:tags(newtags)
-	set_visible(visible, s)
-end
-	
-function set_visible(vtags, s)
-	if visibility_strategy == 1 then
-		for _, t in ipairs(vtags) do
-			t.selected = true
+
+	if #vtags ~= 0 then
+		if visibility_strategy == 1 then
+			for _, t in ipairs(vtags) do t.selected = true end
+		elseif visibility_strategy == 2 then
+			awful.tag.viewmore(vtags, s)
+		elseif visibility_strategy == 3 then
+			awful.tag.viewonly(vtags[1])
+		elseif visibility_strategy == 4 then
+			awful.tag.viewonly(vtags[#vtags])
 		end
-	elseif visibility_strategy == 2 then
-		for _, t in ipairs(screen[s]:tags()) do
-			local keep = false
-			for n, vt in ipairs(vtags) do
-				if t == vt then
-					keep = true
-					break
-				end
-			end
-			t.selected = keep
-		end
-	elseif visibility_strategy == 3 then
-		awful.tag.viewonly(vtags[1])
-	elseif visibility_strategy == 4 then
-		awful.tag.viewonly(vtags[#vtags])
 	end
-	if not awful.tag.selected() then tags[1].selected = true end
 end
 
 function maketag( name, s )
 	local tags = tags[s]
-	local t =  tag({ name = name })
-	t.screen = s
-	tags[#tags + 1] = t
+	tags[#tags + 1] = tag({ name = name })
+	tags[#tags].screen = s
 	if layouts[name] ~= nil then
 		awful.layout.set(layouts[name][1], tags[#tags])
 	elseif layouts['default'] ~= nil then
-		awful.layout.set(layouts['default'][1], t)
+		awful.layout.set(layouts['default'][1], tags[#tags])
 	else
-		awful.layout.set(layouts[1], t)
+		awful.layout.set(layouts[1], tags[#tags])
 	end
-	t.selected = true
-	return t
+	return tags[#tags]
 end
 
 client.add_signal("manage", retag)
@@ -120,8 +109,28 @@ client.add_signal("manage", retag)
 
 function cleanup(c)
 	local tags = tags[c.screen]
+	
+	local selected = {}
 	for i, t in ipairs(tags) do
-		del(tags[i], i)
+		if t.selected then selected[i] = true end
+	end
+
+	local removed = {}
+	for i, t in ipairs(tags) do
+		if del(tags[i]) then
+			removed[#removed + 1] = i
+		end
+	end
+
+	-- If we need to renumber the tags
+	local r = 0
+	for _, i in ipairs(removed) do
+		for n = i, #tags do
+			tags[n] = tags[n + 1]
+		end
+		print(#tags)
+		tags[#tags - r] = nil
+		r = r + 1
 	end
 end
 
@@ -129,33 +138,17 @@ client.add_signal("unmanage", cleanup)
 
 --{{{ del : delete a tag. Taken almost directly from the shifty sources
 --@param tag : the tag to be deleted [current tag]
-function del(tag, idx)
-  local scr = get_screen(tag)
-  local tags = screen[scr]:tags()
-  local sel = awful.tag.selected(scr) local t = tag or sel
-
+function del(t)
   -- return if tag not empty (except sticky)
   local clients = t:clients()
-  local sticky = 0
-  for i, c in ipairs(clients) do
-    if c.sticky then sticky = sticky + 1 end
-  end
-  if #clients > sticky then return end
+	if #clients > 0 then
+  	for i, c in ipairs(clients) do
+    	if not c.sticky then do return false end end
+  	end
+	end
 
   -- remove tag
   t.screen = nil
-
-  -- if the current tag is being deleted, restore from history
-  if t == sel and #tags > 1 then
-    awful.tag.history.restore(scr)
-    -- this is supposed to cycle if history is invalid?
-    -- e.g. if many tags are deleted in a row
-    if not awful.tag.selected(scr) then
-      awful.tag.viewonly(tags[awful.util.cycle(#tags, idx - 1)])
-    end
-  end
-
-  -- FIXME: what is this for??
-  -- if client.focus then client.focus:raise() end
+	return true
 end
 --}}}
