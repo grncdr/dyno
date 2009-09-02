@@ -23,10 +23,10 @@ fallback = false
 show_new_tags = true
 
 -- The strategy used for deciding which tags to display after mapping a new client
--- 1 == select the new clients tags without deselecting anything
--- 2 == select only the new clients tags
--- 3 == select only the first of the new clients tags
--- 4 == select only the last of the new clients tags
+-- 1 == select the newly matched tags without deselecting anything
+-- 2 == select only the newly matched tags
+-- 3 == select only the first of the newly matched tags
+-- 4 == select only the last of the newly matched tags
 -- else == do not alter the selected tags at all
 visibility_strategy = 3
 
@@ -34,6 +34,12 @@ visibility_strategy = 3
 -- Can be useful for retagging terminals when you are using them for different
 -- tasks, but it can be flickery
 tag_on_rename = true
+
+-- These two tables determine tag order, with any un-matched tags being sandwiched in the middle
+-- Do not put the same tag in both tables, it will probably break
+start_tags = {'code', 'web', 'ssh' }
+end_tags = {'sys', 'term'}
+
 
 local function get_screen(obj)
 	return (obj and obj.screen) or mouse.screen or 1
@@ -97,6 +103,30 @@ function retag(c)
 	end
 end
 
+function tagorder_comparator( a, b )
+	local a = a.name
+	local b = b.name
+	local ia, ib = nil
+	local retv = true
+	for i, name in ipairs(start_tags) do
+		if name == a then ia = i end
+		if name == b then ib = i end
+	end
+
+	if not ia and not ib then
+		-- Neither of our tags are listed in start_tags, so search end_tags
+		local retv = not retv -- invert the return for cases where we have one tag with an indice and one without
+		for i, name in ipairs(end_tags) do
+			if name == a then ia = i end
+			if name == b then ib = i end
+		end
+	end
+
+	if ia and ib then retv = (ia < ib) 
+	elseif ib and not ia then	retv = not retv	end
+	return retv
+end
+
 function maketag( name, s )
 	local tags = tags[s]
 	tags[#tags + 1] = tag({ name = name })
@@ -108,6 +138,7 @@ function maketag( name, s )
 	else
 		awful.layout.set(layouts[1], tags[#tags])
 	end
+	tags:sort(tagorder_comparator)
 	return tags[#tags]
 end
 
