@@ -10,22 +10,18 @@ local tags = tags
 local tag = tag
 local layouts = config.layouts
 local awful = require('awful')
-
 require('awful.rules')
-
--- These are for debugging, to be removed
-local tostring = tostring
-local print = print
-
 module('dyno')
 
--- This can be a tag name (string) or tag object or false for auto-generated tag names
+-- Determine the behaviour when a client does not match to any tag	name.
+-- This can be a tagname (string) that will be used as the 'fallback' tag, or
+-- it can be set to false to auto-generate tags based on the clients class name
 fallback = false
 
 -- Whether to automatically select newly created tags
 show_new_tags = true
 
--- The strategy used for deciding which tags to display after mapping a new client
+-- The strategy used to decide which tags to display when mapping a new client
 -- 1 == select the newly matched tags without deselecting anything
 -- 2 == select only the newly matched tags
 -- 3 == select only the first of the newly matched tags
@@ -35,20 +31,22 @@ visibility_strategy = 3
 
 -- Whether to retag windows when their name changes.
 -- Can be useful for retagging terminals when you are using them for different
--- tasks, but it can be flickery
-tag_on_rename = false
+-- tasks, set it true to automatically retag all clients on name-changes, or 
+-- an awful matching rule to only automatically retag matching clients
+tag_on_rename = { class = "URxvt" }
 
--- These two tables determine tag order, with any un-matched tags being sandwiched in the middle
--- Do not put the same tag in both tables, it will probably break
-start_tags = {'code', 'web', 'ssh' }
-end_tags = {'sys', 'term'}
+-- These two tables determine tag order, with any un-matched tags being 
+-- sandwiched in the middle. Do not put the same tagname in both tables!
+start_tags = {'code', 'web', }
+end_tags = {'ssh', 'sys', 'term'}
 
 
 local function get_screen(obj)
 	return (obj and obj.screen) or mouse.screen or 1
 end
 
--- Meat of the module, takes a client as it's argument and sets it's tags according to the tagname property in any matching awful rule
+-- Meat of the module, takes a client as it's argument and sets it's tags 
+-- according to the tagname property in any matching awful rule
 function retag(c, startup)
 	local s = get_screen(c)
 	local newtags = {}
@@ -112,31 +110,35 @@ function retag(c, startup)
 		elseif visibility_strategy == 4 then
 			awful.tag.viewonly(vtags[#vtags])
 		end
-  end
+	end
 end
 
 function tagorder_comparator( a, b )
 	local a = a.name
 	local b = b.name
 	local ia, ib
-  local retv = true
+	local retv = true
 	for i, name in ipairs(start_tags) do
 		if name == a then ia = i 
-    elseif name == b then ib = i end
+		elseif name == b then ib = i end
 	end
 
-	if not ia and not ib then -- Neither of our tags are listed in start_tags, so search end_tags
-		retv = not retv -- invert the return so that end_tags come after unspecified tags
+	if not ia and not ib then 
+		-- invert the return so that end_tags come after unspecified tags
+		retv = not retv 
 		for i, name in ipairs(end_tags) do
 			if name == a then ia = i end
 			if name == b then ib = i end
 		end
 	end
 
-	if ia and ib then retv = (ia < ib) -- both tags found in same table, order according to indices
-  elseif not ia and not ib then retv = (a < b) -- neither tag found in either table, order alphabetically
-	elseif ib and not ia then retv = not retv -- found first tag and not the second, invert the return (false for start_tag, true for end_tag)
-  end
+	-- both tags found in same table, order according to indices
+	if ia and ib then retv = (ia < ib) 
+	-- neither tag found in either table, order alphabetically
+	elseif not ia and not ib then retv = (a < b) 
+	-- found first tag and not the second, invert the return (false for start_tag, true for end_tag)
+	elseif ib and not ia then retv = not retv 
+	end
 	return retv
 end
 
@@ -144,12 +146,12 @@ function maketag( name, s )
 	local tags = tags[s]
 	local t = tag({ name = name }) 
 
-	if 		 layouts[name] 		  then awful.layout.set(layouts[name][1], t)
+	if 		 layouts[name] 			then awful.layout.set(layouts[name][1], t)
 	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
 	else 	 awful.layout.set(layouts[1], t) end
 
 	table.insert(tags, t)
-  table.sort(tags, tagorder_comparator)
+	table.sort(tags, tagorder_comparator)
 	screen[s]:tags(tags)
 	return t
 end
@@ -171,18 +173,18 @@ function cleanup(c)
 end
 
 function del(t)
-  -- return if tag not empty (except sticky)
-  local clients = t:clients()
+	-- return if tag not empty (except sticky)
+	local clients = t:clients()
 	if #clients > 0 then
-  	for i, c in ipairs(clients) do
-    	if not c.sticky then 
+		for i, c in ipairs(clients) do
+			if not c.sticky then 
 				do return false end 
 			end
-  	end
+		end
 	end
 
-  -- remove tag
-  t.screen = nil
+	-- remove tag
+	t.screen = nil
 	return true
 end
 
@@ -192,7 +194,9 @@ if tag_on_rename then
 	local last_rename = ""
 	client.add_signal("manage", function(c)
 		c:add_signal("property::name", function(c)
-			if c.name ~= last_rename then
+      if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
+        do return end 
+      elseif c.name ~= last_rename then
 				last_rename = c.name
 				retag(c)
 				cleanup(c)
@@ -200,4 +204,4 @@ if tag_on_rename then
 		end)
 	end)
 end
--- vim: foldmethod=marker:filetype=lua:expandtab:tabstop=2:softtabstop=2:encoding=utf-8:textwidth=80
+-- vim: foldmethod=marker:filetype=lua:tabstop=2:encoding=utf-8:textwidth=80
