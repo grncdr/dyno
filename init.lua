@@ -47,20 +47,9 @@ end
 
 -- Meat of the module, takes a client as it's argument and sets it's tags 
 -- according to the tagname property in any matching awful rule
-function retag(c, startup)
+function tagtables(c)
 	local s = get_screen(c)
-	local newtags = {}
-	local selected = {}
-	
-	-- find matches
-	for _, r in ipairs(awful.rules.rules) do
-		if r.properties.tagname and awful.rules.match(c, r.rule) then
-			newtags[#newtags + 1] = r.properties.tagname
-			if r.properties.switchtotag then
-				selected[r.properties.tagname] = true
-			end
-		end
-	end
+	local newtags, selected = tagnames(c)
 
 	-- If only match is 'any' tag, then don't retag the client
 	if #newtags == 1 and newtags[1] == 'any' then
@@ -95,22 +84,39 @@ function retag(c, startup)
 				vtags[#vtags + 1] = newtags[i]
 			end
 		end
-		-- Add the 
+		-- Add the tags in selected to vtags
 		if selected[name] then vtags[#vtags + 1] = newtags[i] end
 	end
-	c:tags(newtags)
+  return newtags, vtags
+end
 
-	if #vtags ~= 0 then
-		if visibility_strategy == 1 then
-			for _, t in ipairs(vtags) do t.selected = true end
-		elseif visibility_strategy == 2 then
-			awful.tag.viewmore(vtags, s)
-		elseif visibility_strategy == 3 then
-			awful.tag.viewonly(vtags[1])
-		elseif visibility_strategy == 4 then
-			awful.tag.viewonly(vtags[#vtags])
+function visibletags(vtags, s)
+  if visibility_strategy == 1 then
+    do 
+      return awful.util.table.join(awful.tag.selectedlist(s), vtags)
+    end
+  elseif visibility_strategy == 2 then
+    do return vtags end
+  elseif visibility_strategy == 3 then
+    do return {vtags[1]} end
+  elseif visibility_strategy == 4 then
+    do return {vtags[#vtags]} end
+  end
+end
+
+function tagnames( c )
+  names = {}
+  selected = {}
+	-- find matches
+	for _, r in ipairs(awful.rules.rules) do
+		if r.properties.tagname and awful.rules.match(c, r.rule) then
+			names[#names + 1] = r.properties.tagname
+			if r.properties.switchtotag then
+				selected[r.properties.tagname] = true
+			end
 		end
 	end
+  return names, selected
 end
 
 function tagorder_comparator( a, b )
@@ -188,8 +194,18 @@ function del(t)
 	return true
 end
 
-client.add_signal("manage", retag)
+client.add_signal("manage", function(c)
+  local tags, vtags = tagtables(c)
+	local s = get_screen(c)
+  c:tags(tags)
+  local selected = visibletags(vtags, s)
+  if #vtags > 0 then
+    awful.tag.viewmore(visibletags(vtags, s), s)
+  end
+end)
+
 client.add_signal("unmanage", cleanup)
+
 if tag_on_rename then
 	local last_rename = ""
 	client.add_signal("manage", function(c)
@@ -198,7 +214,20 @@ if tag_on_rename then
         do return end 
       elseif c.name ~= last_rename then
 				last_rename = c.name
-				retag(c)
+        local tags, vtags = tagtables(c)
+				local s = get_screen(c)
+        c:tags(tags)
+
+        local switch = true
+        local want = visibletags(vtags, s)
+        local have = awful.tag.selectedlist(s)
+        for _, w in ipairs(want) do
+          for i, h in ipairs(have) do
+            if h == w then switch = false; do break end end
+          end
+          if not switch then do break end end
+        end
+        if switch then awful.tag.viewmore(want, s) end
 				cleanup(c)
 			end
 		end)
