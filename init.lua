@@ -51,7 +51,6 @@ end
 -- Meat of the module, takes a client as it's argument and sets it's tags according to the tagname property in any matching awful rule
 function retag(c)
 	local s = get_screen(c)
-	local tags = tags[s]
 	local newtags = {}
 	local selected = {}
 	
@@ -81,12 +80,15 @@ function retag(c)
 	for i, name in ipairs(newtags) do
 		-- Don't do anything for the 'any' tag
 		if name == 'any' then do break end end
-		for _, t in ipairs(tags) do
+
+		-- Search tags on screen for existing matches
+		for _, t in ipairs(screen[s]:tags()) do
 			if t.name == name then
 				newtags[i] = t
 				break
 			end
 		end
+		
 		-- Didn't find an existing matching tag, so make one
 		if type(newtags[i]) == 'string' then
 			newtags[i] = maketag( name, s )
@@ -110,52 +112,55 @@ function retag(c)
 		elseif visibility_strategy == 4 then
 			awful.tag.viewonly(vtags[#vtags])
 		end
-	end
+end
 end
 
 function tagorder_comparator( a, b )
 	local a = a.name
 	local b = b.name
-	local ia, ib = nil
-	local retv = true
+	local ia, ib
+  local retv = true
 	for i, name in ipairs(start_tags) do
-		if name == a then ia = i end
-		if name == b then ib = i end
+		if name == a then ia = i 
+    elseif name == b then ib = i end
 	end
 
 	if not ia and not ib then
 		-- Neither of our tags are listed in start_tags, so search end_tags
-		local retv = not retv -- invert the return for cases where we have one tag with an indice and one without
+		local retv = not retv -- invert the return so that end_tags come last
 		for i, name in ipairs(end_tags) do
 			if name == a then ia = i end
 			if name == b then ib = i end
 		end
 	end
 
-	if ia and ib then retv = (ia < ib) 
-	elseif ib and not ia then	retv = not retv	end
+	if ia and ib then retv = (ia < ib) -- both tags found in same table, order according to indices
+  elseif not ia and not ib then retv = (a < b) -- neither tag found in either table, order alphabetically
+	elseif ib and not ia then retv = not retv -- found first tag and not the second, invert the return (false for start_tag, true for end_tag)
+  end
 	return retv
 end
 
 function maketag( name, s )
 	local tags = tags[s]
 	local idx = nil
-	for i, t in ipairs(tags) do
-		if tagorder_comparator(name, t.name) then -- Tag we are making should come before this tag
-			idx = i
-		end
-	end
+	local t = tag({ name = name }) 
+	-- t.screen = s
 
-	if not idx then idx = #tags + 1 end 
+--	for i, t in ipairs(tags) do
+--		if tagorder_comparator(name, t.name) then -- Tag we are making should come before this tag
+--			idx = i
+--		end
+--	end
+--	if not idx then idx = #tags + 1 end 
 
-	table.insert( tags, idx, tag({ name = name }) )
-	tags[idx].screen = s
-
-	if 		 layouts[name] 		  then awful.layout.set(layouts[name][1], tags[idx])
-	elseif layouts['default'] then awful.layout.set(layouts['default'][1], tags[idx])
-	else 	 awful.layout.set(layouts[1], tags[idx]) end
-
-	return tags[idx]
+	if 		 layouts[name] 		  then awful.layout.set(layouts[name][1], t)
+	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
+	else 	 awful.layout.set(layouts[1], t) end
+	table.insert(tags, t)
+  table.sort(tags, tagorder_comparator)
+	screen[s]:tags(tags)
+	return t
 end
 
 function cleanup(c)
@@ -204,3 +209,4 @@ if tag_on_rename then
 		end)
 	end)
 end
+-- vim: foldmethod=marker:filetype=lua:expandtab:shiftwidth=2:tabstop=2:softtabstop=2:encoding=utf-8:textwidth=80
