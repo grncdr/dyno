@@ -31,12 +31,12 @@ show_new_tags = true
 -- 3 == select only the first of the newly matched tags
 -- 4 == select only the last of the newly matched tags
 -- else == do not alter the selected tags at all
-visibility_strategy = 4
+visibility_strategy = 3
 
 -- Whether to retag windows when their name changes.
 -- Can be useful for retagging terminals when you are using them for different
 -- tasks, but it can be flickery
-tag_on_rename = true
+tag_on_rename = false
 
 -- These two tables determine tag order, with any un-matched tags being sandwiched in the middle
 -- Do not put the same tag in both tables, it will probably break
