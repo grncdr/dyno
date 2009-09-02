@@ -1,13 +1,16 @@
-local client = client
-local mouse = mouse
+local table = table
 local pairs = pairs
 local ipairs = ipairs
 local type = type
+
+local client = client
+local mouse = mouse
 local screen = screen
 local tags = tags
 local tag = tag
 local layouts = config.layouts
 local awful = require('awful')
+
 require('awful.rules')
 
 -- These are for debugging, to be removed
@@ -28,7 +31,7 @@ show_new_tags = true
 -- 3 == select only the first of the newly matched tags
 -- 4 == select only the last of the newly matched tags
 -- else == do not alter the selected tags at all
-visibility_strategy = 3
+visibility_strategy = 4
 
 -- Whether to retag windows when their name changes.
 -- Can be useful for retagging terminals when you are using them for different
@@ -129,17 +132,30 @@ end
 
 function maketag( name, s )
 	local tags = tags[s]
-	tags[#tags + 1] = tag({ name = name })
-	tags[#tags].screen = s
-	if layouts[name] ~= nil then
-		awful.layout.set(layouts[name][1], tags[#tags])
-	elseif layouts['default'] ~= nil then
-		awful.layout.set(layouts['default'][1], tags[#tags])
-	else
-		awful.layout.set(layouts[1], tags[#tags])
+	local idx = nil
+	for i, t in ipairs(tags) do
+		if tagorder_comparator(name, t.name) then -- Tag we are making should come before this tag
+			idx = i
+		end
 	end
-	tags:sort(tagorder_comparator)
-	return tags[#tags]
+
+	if idx then
+		for i = #tags, idx, -1 do
+			tags[i + 1] = tags[i]
+		end
+	else idx = #tags + 1 end
+
+	tags[idx] = tag({ name = name })
+	tags[idx].screen = s
+	if layouts[name] ~= nil then
+		awful.layout.set(layouts[name][1], tags[idx])
+	elseif layouts['default'] ~= nil then
+		awful.layout.set(layouts['default'][1], tags[idx])
+	else
+		awful.layout.set(layouts[1], tags[idx])
+	end
+	-- table.sort(tags, tagorder_comparator)
+	return tags[idx]
 end
 
 function cleanup(c)
