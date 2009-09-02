@@ -162,6 +162,7 @@ if tag_on_rename then
 			if c.name ~= last_rename then
 				last_rename = c.name
 				retag(c)
+				cleanup(c)
 			end
 		end)
 	end)
