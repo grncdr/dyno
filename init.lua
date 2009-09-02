@@ -16,9 +16,6 @@ local print = print
 
 module('dyno')
 
--- Whether or not to use an "all" tag as a sort of faux Expose effect
-all_tag = true
-
 -- This can be a tag name (string) or tag object or false for auto-generated tag names
 fallback = false
 
@@ -30,8 +27,13 @@ show_new_tags = true
 -- 2 == select only the new clients tags
 -- 3 == select only the first of the new clients tags
 -- 4 == select only the last of the new clients tags
--- default == do not alter the selected tags at all
+-- else == do not alter the selected tags at all
 visibility_strategy = 3
+
+-- Whether to retag windows when their name changes.
+-- Can be useful for retagging terminals when you are using them for different
+-- tasks, but it can be flickery
+tag_on_rename = true
 
 local function get_screen(obj)
 	return (obj and obj.screen) or mouse.screen or 1
@@ -109,13 +111,6 @@ function maketag( name, s )
 	return tags[#tags]
 end
 
-client.add_signal("manage", retag)
-
--- Uncomment this to have dyno retag windows when their name changes (can be useful for retagging terminals when you are using them for different tasks)
-client.add_signal("manage", function(c)
-	c:add_signal("property::name", retag)
-end)
-
 function cleanup(c)
 	local tags = tags[c.screen]
 	
@@ -142,8 +137,6 @@ function cleanup(c)
 	end
 end
 
-client.add_signal("unmanage", cleanup)
-
 function del(t)
   -- return if tag not empty (except sticky)
   local clients = t:clients()
@@ -159,3 +152,18 @@ function del(t)
   t.screen = nil
 	return true
 end
+
+client.add_signal("manage", retag)
+client.add_signal("unmanage", cleanup)
+if tag_on_rename then
+	local last_rename = ""
+	client.add_signal("manage", function(c)
+		c:add_signal("property::name", function(c)
+			if c.name ~= last_rename then
+				last_rename = c.name
+				retag(c)
+			end
+		end)
+	end)
+end
+
