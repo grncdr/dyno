@@ -48,13 +48,14 @@ local function get_screen(obj)
 	return (obj and obj.screen) or mouse.screen or 1
 end
 
+-- Meat of the module, takes a client as it's argument and sets it's tags according to the tagname property in any matching awful rule
 function retag(c)
 	local s = get_screen(c)
 	local tags = tags[s]
 	local newtags = {}
 	local selected = {}
 	
-	-- check awful.rules.rules to see if anything matches
+	-- find matches
 	for _, r in ipairs(awful.rules.rules) do
 		if r.properties.tagname and awful.rules.match(c, r.rule) then
 			newtags[#newtags + 1] = r.properties.tagname
@@ -64,32 +65,38 @@ function retag(c)
 		end
 	end
 
+	-- If only match is 'any' tag, then don't retag the client
 	if #newtags == 1 and newtags[1] == 'any' then
 		do return end
 	end
 
-	-- if no tagnames specified
+	-- If no matches were found, check the fallback strategy
 	if #newtags == 0 then
-		if fallback then newtags = { fallback }
-		else newtags = { c.class:lower() } end
+		if fallback then newtags = { fallback } -- Use the defined fallback tagname
+		else newtags = { c.class:lower() } end -- We are generating tags based on window class
 	end
 
 	local vtags = {}
 	-- go through newtags table and replace strings with tag objects
 	for i, name in ipairs(newtags) do
+		-- Don't do anything for the 'any' tag
+		if name == 'any' then do break end end
 		for _, t in ipairs(tags) do
 			if t.name == name then
 				newtags[i] = t
 				break
 			end
 		end
-		if type(newtags[i]) == 'string' and newtags[i] ~= 'any' then
+		-- Didn't find an existing matching tag, so make one
+		if type(newtags[i]) == 'string' then
 			newtags[i] = maketag( name, s )
-			if not selected[name] and show_new_tags then
+			-- The check to selected[name] is necessary to avoid adding the tag to vtags 2x
+			if show_new_tags and not selected[name] then
 				vtags[#vtags + 1] = newtags[i]
 			end
 		end
-		if selected[name] ~= nil then vtags[#vtags + 1] = newtags[i] end
+		-- Add the 
+		if selected[name] then vtags[#vtags + 1] = newtags[i] end
 	end
 	c:tags(newtags)
 
@@ -139,22 +146,15 @@ function maketag( name, s )
 		end
 	end
 
-	if idx then
-		for i = #tags, idx, -1 do
-			tags[i + 1] = tags[i]
-		end
-	else idx = #tags + 1 end
+	if not idx then idx = #tags + 1 end 
 
-	tags[idx] = tag({ name = name })
+	table.insert( tags, idx, tag({ name = name }) )
 	tags[idx].screen = s
-	if layouts[name] ~= nil then
-		awful.layout.set(layouts[name][1], tags[idx])
-	elseif layouts['default'] ~= nil then
-		awful.layout.set(layouts['default'][1], tags[idx])
-	else
-		awful.layout.set(layouts[1], tags[idx])
-	end
-	-- table.sort(tags, tagorder_comparator)
+
+	if 		 layouts[name] 		  then awful.layout.set(layouts[name][1], tags[idx])
+	elseif layouts['default'] then awful.layout.set(layouts['default'][1], tags[idx])
+	else 	 awful.layout.set(layouts[1], tags[idx]) end
+
 	return tags[idx]
 end
 
@@ -168,19 +168,9 @@ function cleanup(c)
 
 	local removed = {}
 	for i, t in ipairs(tags) do
-		if del(tags[i]) then
-			removed[#removed + 1] = i
+		if del(t) then
+			table.remove(tags, i)
 		end
-	end
-
-	-- If we need to renumber the tags
-	local r = 0
-	for _, i in ipairs(removed) do
-		for n = i - r, #tags do
-			tags[n] = tags[n + 1]
-		end
-		tags[#tags - r] = nil
-		r = r + 1
 	end
 end
 
@@ -214,4 +204,3 @@ if tag_on_rename then
 		end)
 	end)
 end
-
