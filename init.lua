@@ -125,9 +125,8 @@ function tagorder_comparator( a, b )
     elseif name == b then ib = i end
 	end
 
-	if not ia and not ib then
-		-- Neither of our tags are listed in start_tags, so search end_tags
-		local retv = not retv -- invert the return so that end_tags come last
+	if not ia and not ib then -- Neither of our tags are listed in start_tags, so search end_tags
+		retv = not retv -- invert the return so that end_tags come after unspecified tags
 		for i, name in ipairs(end_tags) do
 			if name == a then ia = i end
 			if name == b then ib = i end
@@ -145,18 +144,19 @@ function maketag( name, s )
 	local tags = tags[s]
 	local idx = nil
 	local t = tag({ name = name }) 
-	-- t.screen = s
-
---	for i, t in ipairs(tags) do
---		if tagorder_comparator(name, t.name) then -- Tag we are making should come before this tag
---			idx = i
---		end
---	end
---	if not idx then idx = #tags + 1 end 
 
 	if 		 layouts[name] 		  then awful.layout.set(layouts[name][1], t)
 	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
 	else 	 awful.layout.set(layouts[1], t) end
+
+--	for i, t in ipairs(tags) do
+--		if tagorder_comparator(name, t.name) then -- Tag we are making should come before this tag
+--			idx = i
+--    break
+--		end
+--	end
+--	if not idx then idx = #tags + 1 end 
+
 	table.insert(tags, t)
   table.sort(tags, tagorder_comparator)
 	screen[s]:tags(tags)
@@ -209,4 +209,4 @@ if tag_on_rename then
 		end)
 	end)
 end
--- vim: foldmethod=marker:filetype=lua:expandtab:shiftwidth=2:tabstop=2:softtabstop=2:encoding=utf-8:textwidth=80
+-- vim: foldmethod=marker:filetype=lua:expandtab:tabstop=2:softtabstop=2:encoding=utf-8:textwidth=80
