@@ -49,7 +49,7 @@ local function get_screen(obj)
 end
 
 -- Meat of the module, takes a client as it's argument and sets it's tags according to the tagname property in any matching awful rule
-function retag(c)
+function retag(c, startup)
 	local s = get_screen(c)
 	local newtags = {}
 	local selected = {}
@@ -112,7 +112,7 @@ function retag(c)
 		elseif visibility_strategy == 4 then
 			awful.tag.viewonly(vtags[#vtags])
 		end
-end
+  end
 end
 
 function tagorder_comparator( a, b )
@@ -142,20 +142,11 @@ end
 
 function maketag( name, s )
 	local tags = tags[s]
-	local idx = nil
 	local t = tag({ name = name }) 
 
 	if 		 layouts[name] 		  then awful.layout.set(layouts[name][1], t)
 	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
 	else 	 awful.layout.set(layouts[1], t) end
-
---	for i, t in ipairs(tags) do
---		if tagorder_comparator(name, t.name) then -- Tag we are making should come before this tag
---			idx = i
---    break
---		end
---	end
---	if not idx then idx = #tags + 1 end 
 
 	table.insert(tags, t)
   table.sort(tags, tagorder_comparator)
