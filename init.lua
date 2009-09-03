@@ -53,7 +53,7 @@ function tagtables(c)
 
 	-- If only match is 'any' tag, then don't retag the client
 	if #newtags == 1 and newtags[1] == 'any' then
-		do return end
+		return 
 	end
 
 	-- If no matches were found, check the fallback strategy
@@ -66,7 +66,7 @@ function tagtables(c)
 	-- go through newtags table and replace strings with tag objects
 	for i, name in ipairs(newtags) do
 		-- Don't do anything for the 'any' tag
-		if name == 'any' then do break end end
+		if name == 'any' then break end
 
 		-- Search tags on screen for existing matches
 		for _, t in ipairs(screen[s]:tags()) do
@@ -92,15 +92,13 @@ end
 
 function visibletags(vtags, s)
   if visibility_strategy == 1 then
-    do 
-      return awful.util.table.join(awful.tag.selectedlist(s), vtags)
-    end
+    return awful.util.table.join(awful.tag.selectedlist(s), vtags)
   elseif visibility_strategy == 2 then
-    do return vtags end
+    return vtags
   elseif visibility_strategy == 3 then
-    do return {vtags[1]} end
+    return {vtags[1]}
   elseif visibility_strategy == 4 then
-    do return {vtags[#vtags]} end
+    return {vtags[#vtags]}
   end
 end
 
@@ -184,7 +182,7 @@ function del(t)
 	if #clients > 0 then
 		for i, c in ipairs(clients) do
 			if not c.sticky then 
-				do return false end 
+				return false 
 			end
 		end
 	end
@@ -211,7 +209,7 @@ if tag_on_rename then
 	client.add_signal("manage", function(c)
 		c:add_signal("property::name", function(c)
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
-        do return end 
+        return
       elseif c.name ~= last_rename then
 				last_rename = c.name
         local tags, vtags = tagtables(c)
@@ -223,9 +221,9 @@ if tag_on_rename then
         local have = awful.tag.selectedlist(s)
         for _, w in ipairs(want) do
           for i, h in ipairs(have) do
-            if h == w then switch = false; do break end end
+            if h == w then switch = false; break end
           end
-          if not switch then do break end end
+          if not switch then break end
         end
         if switch then awful.tag.viewmore(want, s) end
 				cleanup(c)
