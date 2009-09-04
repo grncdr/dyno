@@ -58,8 +58,8 @@ function tagtables(c)
 
 	-- If no matches were found, check the fallback strategy
 	if #newtags == 0 then
-		if fallback then newtags = { fallback } -- Use the defined fallback tagname
-		else newtags = { c.class:lower() } end -- We are generating tags based on window class
+		if fallback then newtags = { fallback } --Use the defined fallback tagname
+		else newtags = { c.class:lower() } end --Generate tags based on window class
 	end
 
 	local vtags = {}
@@ -211,6 +211,7 @@ if tag_on_rename then
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
         return
       elseif c.name ~= last_rename then
+				local f = awful.client.focus
 				last_rename = c.name
         local tags, vtags = tagtables(c)
 				local s = get_screen(c)
@@ -227,6 +228,8 @@ if tag_on_rename then
         end
         if switch then awful.tag.viewmore(want, s) end
 				cleanup(c)
+				-- Restore focus
+				awful.client.focus = f
 			end
 		end)
 	end)
