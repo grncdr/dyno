@@ -11,6 +11,9 @@ local tag = tag
 local layouts = config.layouts
 local awful = require('awful')
 require('awful.rules')
+
+-- Debug environment
+local naughty = require('naughty')
 module('dyno')
 
 -- Determine the behaviour when a client does not match to any tag	name.
@@ -26,8 +29,10 @@ show_new_tags = true
 -- 2 == select only the newly matched tags
 -- 3 == select only the first of the newly matched tags
 -- 4 == select only the last of the newly matched tags
+-- 5 == select only the matching tag with the least clients (this is often the
+-- most specific tag to the client)
 -- else == do not alter the selected tags at all
-visibility_strategy = 3
+visibility_strategy = 5
 
 -- Whether to retag windows when their name changes.
 -- Can be useful for retagging terminals when you are using them for different
@@ -38,7 +43,7 @@ tag_on_rename = { class = "URxvt" }
 -- These two tables determine tag order, with any un-matched tags being 
 -- sandwiched in the middle. Do not put the same tagname in both tables!
 start_tags = {'code', 'web', }
-end_tags = {'ssh', 'sys', 'term'}
+end_tags = { 'ssh', 'sys', 'term' }
 
 
 local function get_screen(obj)
@@ -99,7 +104,15 @@ function visibletags(vtags, s)
     return {vtags[1]}
   elseif visibility_strategy == 4 then
     return {vtags[#vtags]}
+	elseif visibility_strategy == 5 then
+		naughty.notify({ text = "Retagging using strategy "..visibility_strategy })
+		local mindex = 1
+		for i, tag in ipairs(vtags) do
+			if #tag:clients() < #vtags[mindex]:clients() then mindex = i end
+		end
+		return {vtags[mindex]}
   end
+
 end
 
 function tagnames( c )
@@ -108,10 +121,16 @@ function tagnames( c )
 	-- find matches
 	for _, r in ipairs(awful.rules.rules) do
 		if r.properties.tagname and awful.rules.match(c, r.rule) then
-			names[#names + 1] = r.properties.tagname
 			if r.properties.switchtotag then
 				selected[r.properties.tagname] = true
 			end
+			if r.properties.exclusive then
+				names = {r.properties.tagname}
+				if r.properties.switchtotag then selected = {r.properties.tagname}
+				else selected = {} end
+				break
+			end
+			names[#names + 1] = r.properties.tagname
 		end
 	end
   return names, selected
@@ -211,6 +230,7 @@ if tag_on_rename then
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
         return
       elseif c.name ~= last_rename then
+				naughty.notify({text = "Retagging on rename to "..c.name})
 				local f = awful.client.focus
 				last_rename = c.name
         local tags, vtags = tagtables(c)
