@@ -13,7 +13,7 @@ local awful = require('awful')
 require('awful.rules')
 
 -- Debug environment
-local naughty = require('naughty')
+
 module('dyno')
 
 -- Determine the behaviour when a client does not match to any tag	name.
@@ -105,7 +105,6 @@ function visibletags(vtags, s)
   elseif visibility_strategy == 4 then
     return {vtags[#vtags]}
 	elseif visibility_strategy == 5 then
-		naughty.notify({ text = "Setting visibility using strategy "..visibility_strategy })
 		local mindex = 1
 		for i, tag in ipairs(vtags) do
 			if #tag:clients() < #vtags[mindex]:clients() then mindex = i end
@@ -229,7 +228,10 @@ client.add_signal("manage", function(c)
 	viewtags(get_screen(c), vtags)
 end)
 
-client.add_signal("unmanage", cleanup)
+client.add_signal("unmanage", function(c)
+	prev_name[c] = nil
+	cleanup(c)
+end)
 
 if tag_on_rename then
 	prev_name = {}
@@ -238,10 +240,9 @@ if tag_on_rename then
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
         return
       elseif c.name ~= prev_name[c] then
-				naughty.notify({text = "Retagging on rename to "..c.name})
+				print("Retagging client on rename to: "..c.name)
 				local f = awful.client.focus
 				prev_name[c] = c.name
-
         local tags, vtags = tagtables(c)
         c:tags(tags)
 				viewtags(get_screen(c), vtags)
