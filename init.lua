@@ -105,14 +105,26 @@ function visibletags(vtags, s)
   elseif visibility_strategy == 4 then
     return {vtags[#vtags]}
 	elseif visibility_strategy == 5 then
-		naughty.notify({ text = "Retagging using strategy "..visibility_strategy })
+		naughty.notify({ text = "Setting visibility using strategy "..visibility_strategy })
 		local mindex = 1
 		for i, tag in ipairs(vtags) do
 			if #tag:clients() < #vtags[mindex]:clients() then mindex = i end
 		end
 		return {vtags[mindex]}
   end
+end
 
+function viewtags(s, vtags)
+	local switch = true
+	local want = visibletags(vtags, s)
+	local have = awful.tag.selectedlist(s)
+	for _, w in ipairs(want) do
+		for i, h in ipairs(have) do
+			if h == w then switch = false; break end
+		end
+		if not switch then break end
+	end
+	if switch then awful.tag.viewmore(want, s) end
 end
 
 function tagnames( c )
@@ -213,40 +225,26 @@ end
 
 client.add_signal("manage", function(c)
   local tags, vtags = tagtables(c)
-	local s = get_screen(c)
   c:tags(tags)
-  local selected = visibletags(vtags, s)
-  if #vtags > 0 then
-    awful.tag.viewmore(visibletags(vtags, s), s)
-  end
+	viewtags(get_screen(c), vtags)
 end)
 
 client.add_signal("unmanage", cleanup)
 
 if tag_on_rename then
-	local last_rename = ""
+	prev_name = {}
 	client.add_signal("manage", function(c)
 		c:add_signal("property::name", function(c)
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
         return
-      elseif c.name ~= last_rename then
+      elseif c.name ~= prev_name[c] then
 				naughty.notify({text = "Retagging on rename to "..c.name})
 				local f = awful.client.focus
-				last_rename = c.name
-        local tags, vtags = tagtables(c)
-				local s = get_screen(c)
-        c:tags(tags)
+				prev_name[c] = c.name
 
-        local switch = true
-        local want = visibletags(vtags, s)
-        local have = awful.tag.selectedlist(s)
-        for _, w in ipairs(want) do
-          for i, h in ipairs(have) do
-            if h == w then switch = false; break end
-          end
-          if not switch then break end
-        end
-        if switch then awful.tag.viewmore(want, s) end
+        local tags, vtags = tagtables(c)
+        c:tags(tags)
+				viewtags(get_screen(c), vtags)
 				cleanup(c)
 				-- Restore focus
 				awful.client.focus = f
