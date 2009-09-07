@@ -38,7 +38,7 @@ visibility_strategy = 5
 -- Can be useful for retagging terminals when you are using them for different
 -- tasks, set it true to automatically retag all clients on name-changes, or 
 -- an awful matching rule to only automatically retag matching clients
-tag_on_rename = { class = "URxvt" }
+tag_on_rename = { class = "terminal" }
 
 -- These two tables determine tag order, with any un-matched tags being 
 -- sandwiched in the middle. Do not put the same tagname in both tables!
@@ -105,11 +105,11 @@ function visibletags(vtags, s)
   elseif visibility_strategy == 4 then
     return {vtags[#vtags]}
 	elseif visibility_strategy == 5 then
-		local mindex = 1
-		for i, tag in ipairs(vtags) do
-			if #tag:clients() < #vtags[mindex]:clients() then mindex = i end
+		local min = vtags[1]
+		for i, tag in ipairs(#vtags) do
+			if #tags:clients() < #min:clients() then min = tag end
 		end
-		return {vtags[mindex]}
+		return {min}
   end
 end
 
@@ -164,8 +164,7 @@ function tagorder_comparator( a, b )
 			if name == a then ia = i end
 			if name == b then ib = i end
 		end
-	end
-
+	end 
 	-- both tags found in same table, order according to indices
 	if ia and ib then retv = (ia < ib) 
 	-- neither tag found in either table, order alphabetically
@@ -234,15 +233,14 @@ client.add_signal("unmanage", function(c)
 end)
 
 if tag_on_rename then
-	prev_name = {}
+	prev_names = {}
 	client.add_signal("manage", function(c)
 		c:add_signal("property::name", function(c)
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
         return
       elseif c.name ~= prev_name[c] then
-				print("Retagging client on rename to: "..c.name)
 				local f = awful.client.focus
-				prev_name[c] = c.name
+				prev_names[c] = c.name
         local tags, vtags = tagtables(c)
         c:tags(tags)
 				viewtags(get_screen(c), vtags)
