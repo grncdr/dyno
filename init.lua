@@ -38,7 +38,7 @@ visibility_strategy = 5
 -- Can be useful for retagging terminals when you are using them for different
 -- tasks, set it true to automatically retag all clients on name-changes, or 
 -- an awful matching rule to only automatically retag matching clients
-tag_on_rename = { class = "terminal" }
+tag_on_rename = { class = "URxvt" }
 
 -- These two tables determine tag order, with any un-matched tags being 
 -- sandwiched in the middle. Do not put the same tagname in both tables!
@@ -106,8 +106,8 @@ function visibletags(vtags, s)
     return {vtags[#vtags]}
 	elseif visibility_strategy == 5 then
 		local min = vtags[1]
-		for i, tag in ipairs(#vtags) do
-			if #tags:clients() < #min:clients() then min = tag end
+		for i, tag in ipairs(vtags) do
+			if #tag:clients() < #min:clients() then min = tag end
 		end
 		return {min}
   end
@@ -238,15 +238,15 @@ if tag_on_rename then
 		c:add_signal("property::name", function(c)
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
         return
-      elseif c.name ~= prev_name[c] then
-				local f = awful.client.focus
+      elseif c.name ~= prev_names[c] then
+				local f = client.focus
 				prev_names[c] = c.name
         local tags, vtags = tagtables(c)
         c:tags(tags)
 				viewtags(get_screen(c), vtags)
 				cleanup(c)
 				-- Restore focus
-				awful.client.focus = f
+				client.focus = f
 			end
 		end)
 	end)
