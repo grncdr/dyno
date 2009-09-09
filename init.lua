@@ -228,7 +228,7 @@ client.add_signal("manage", function(c)
 end)
 
 client.add_signal("unmanage", function(c)
-	prev_name[c] = nil
+	prev_names[c] = nil
 	cleanup(c)
 end)
 
