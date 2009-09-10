@@ -190,18 +190,21 @@ function maketag( name, s )
 end
 
 function cleanup(c)
-	local tags = tags[c.screen]
+	local s = get_screen(c)
+	local tags = tags[s]
 	
 	local selected = {}
-	for i, t in ipairs(tags) do
-		if t.selected then selected[i] = true end
-	end
 
 	local removed = {}
 	for i, t in ipairs(tags) do
 		if del(t) then
 			table.remove(tags, i)
 		end
+	end
+
+	if not awful.tag.selected(s) then
+		awful.tag.history.restore()
+		tags[1].selected = true
 	end
 end
 
