@@ -16,6 +16,8 @@ require('awful.rules')
 
 module('dyno')
 
+-- {{{ CONFIGURATION
+
 -- Determine the behaviour when a client does not match to any tag	name.
 -- This can be a tagname (string) that will be used as the 'fallback' tag, or
 -- it can be set to false to auto-generate tags based on the clients class name
@@ -46,6 +48,9 @@ start_tags = {'code', 'web', }
 end_tags = { 'ssh', 'sys', 'term' }
 
 
+-- END CONFIGURATION }}}
+
+-- Small utility function that will always return a screen #
 local function get_screen(obj)
 	return (obj and obj.screen) or mouse.screen or 1
 end
@@ -95,35 +100,30 @@ function tagtables(c)
   return newtags, vtags
 end
 
-function visibletags(vtags, s)
+function viewtags(s, vtags)
+	local want
   if visibility_strategy == 1 then
-    return awful.util.table.join(awful.tag.selectedlist(s), vtags)
+    want = awful.util.table.join(awful.tag.selectedlist(s), vtags)
   elseif visibility_strategy == 2 then
-    return vtags
+    want = vtags
   elseif visibility_strategy == 3 then
-    return {vtags[1]}
+    want = {vtags[1]}
   elseif visibility_strategy == 4 then
-    return {vtags[#vtags]}
+    want = {vtags[#vtags]}
 	elseif visibility_strategy == 5 then
 		local min = vtags[1]
 		for i, tag in ipairs(vtags) do
 			if #tag:clients() < #min:clients() then min = tag end
 		end
-		return {min}
+		want = {min}
   end
-end
-
-function viewtags(s, vtags)
-	local switch = true
-	local want = visibletags(vtags, s)
 	local have = awful.tag.selectedlist(s)
 	for _, w in ipairs(want) do
 		for i, h in ipairs(have) do
-			if h == w then switch = false; break end
+			if h == w then return end
 		end
-		if not switch then break end
 	end
-	if switch then awful.tag.viewmore(want, s) end
+	awful.tag.viewmore(want, s)
 end
 
 function tagnames( c )
@@ -204,7 +204,6 @@ function cleanup(c)
 
 	if not awful.tag.selected(s) then
 		awful.tag.history.restore()
-		tags[1].selected = true
 	end
 end
 
