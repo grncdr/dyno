@@ -2,17 +2,16 @@ local table = table
 local pairs = pairs
 local ipairs = ipairs
 local type = type
+local print = print
 
 local client = client
 local mouse = mouse
 local screen = screen
 local tags = tags
 local tag = tag
-local layouts = config.layouts
+local layouts = layouts
 local awful = require('awful')
 require('awful.rules')
-
--- Debug environment
 
 module('dyno')
 
@@ -26,27 +25,35 @@ fallback = false
 -- Whether to automatically select newly created tags
 show_new_tags = true
 
--- The strategy used to decide which tags to display when mapping a new client
--- 1 == select the newly matched tags without deselecting anything
--- 2 == select only the newly matched tags
--- 3 == select only the first of the newly matched tags
--- 4 == select only the last of the newly matched tags
--- 5 == select only the matching tag with the least clients (this is often the
--- most specific tag to the client)
--- else == do not alter the selected tags at all
-visibility_strategy = 5
+-- Whether we should always switch tags, regardless of the switchtotag property
+-- You should leave this alone unless you want to end update all your awful
+-- rules or spend a lot of time looking at the desktop
+always_switch = true
 
--- Whether to retag windows when their name changes.
+-- The strategy used to decide which tags to display when mapping a new client
+-- select the newly matched tags without deselecting anything
+VS_APPEND = 1
+-- select only the newly matched tags
+VS_NEW_ALL = 2
+-- select only the first of the newly matched tags
+VS_NEW_FIRST = 3
+-- select only the last of the newly matched tags
+VS_NEW_LAST = 4
+-- select only the matching tag with the least clients (this is often the
+-- most specific tag to the client)
+VS_SMALLEST = 5
+visibility_strategy = VS_SMALLEST
+
+-- Should we retag windows when their name changes?
 -- Can be useful for retagging terminals when you are using them for different
 -- tasks, set it true to automatically retag all clients on name-changes, or 
--- an awful matching rule to only automatically retag matching clients
-tag_on_rename = { class = "URxvt" }
+-- an awful matching rule to automatically retag only matching clients
+tag_on_rename = { class = "XTerm" }
 
 -- These two tables determine tag order, with any un-matched tags being 
 -- sandwiched in the middle. Do not put the same tagname in both tables!
 start_tags = {'code', 'web', }
 end_tags = { 'ssh', 'sys', 'term' }
-
 
 -- END CONFIGURATION }}}
 
@@ -54,6 +61,109 @@ end_tags = { 'ssh', 'sys', 'term' }
 local function get_screen(obj)
 	return (obj and obj.screen) or mouse.screen or 1
 end
+
+local function tagnames( c )
+  local names = {}
+  local select_these = {}
+	-- find matches
+	for _, r in ipairs(awful.rules.rules) do
+		if r.properties.tagname and awful.rules.match(c, r.rule) then
+			if r.properties.exclusive then
+				names = {r.properties.tagname}
+				select_these = {}
+				if always_switch or r.properties.switchtotag then 
+					select_these[r.properties.tagname] = true
+				end
+				break
+			end
+			if always_switch or r.properties.switchtotag then
+				select_these[r.properties.tagname] = true
+			end
+			names[#names + 1] = r.properties.tagname
+		end
+	end
+  return names, select_these
+end
+
+local function tagorder_comparator( a, b )
+	local a = a.name
+	local b = b.name
+	local ia, ib
+	local retv = true
+	for i, name in ipairs(start_tags) do
+		if name == a then ia = i 
+		elseif name == b then ib = i end
+	end
+
+	if not ia and not ib then 
+		-- invert the return so that end_tags come after unspecified tags
+		retv = not retv 
+		for i, name in ipairs(end_tags) do
+			if name == a then ia = i end
+			if name == b then ib = i end
+		end
+	end 
+	-- both tags found in same table, order according to indices
+	if ia and ib then retv = (ia < ib) 
+	-- neither tag found in either table, order alphabetically
+	elseif not ia and not ib then retv = (a < b) 
+	-- found first tag and not the second, invert the return (false for start_tag, true for end_tag)
+	elseif ib and not ia then retv = not retv 
+	end
+	return retv
+end
+
+local function maketag( name, s )
+	local tags = tags[s]
+	local t = tag({ name = name }) 
+
+	if 		 layouts[name] 			then awful.layout.set(layouts[name][1], t)
+	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
+	else 	 awful.layout.set(layouts[1], t) end
+
+	table.insert(tags, t)
+	table.sort(tags, tagorder_comparator)
+	screen[s]:tags(tags)
+	return t
+end
+
+local function cleanup()
+	for s = 1, #tags do
+		local tags = tags[s]
+		
+		local selected = {}
+
+		local removed = {}
+		for i, t in ipairs(tags) do
+			local clients = t:clients()
+			local it_should_go = true
+			if #clients > 0 then
+				for i, c in ipairs(clients) do
+					if not c.sticky then 
+						it_should_go = false
+						break
+					end
+				end
+			end
+
+			if it_should_go then
+				-- remove tag
+				t.screen = nil
+				table.remove(tags, i)
+			end
+		end
+
+		if not awful.tag.selected(s) then
+			awful.tag.history.restore()
+		end
+	end
+end
+
+local function del(t)
+	-- return if tag not empty (except sticky)
+	return true
+end
+
 
 -- Meat of the module, takes a client as it's argument and sets it's tags 
 -- according to the tagname property in any matching awful rule
@@ -94,162 +204,73 @@ function tagtables(c)
 				vtags[#vtags + 1] = newtags[i]
 			end
 		end
+		
 		-- Add the tags in selected to vtags
 		if selected[name] then vtags[#vtags + 1] = newtags[i] end
 	end
+	if #vtags == 0 then print "No visible tags being returned, you should either set switchtotag to true in (most of) your awful rules, or set alway_switch back to true in dyno/init.lua" end
   return newtags, vtags
 end
 
-function viewtags(s, vtags)
+-- Set the visible tags according to the selected visibility strategy
+local function settags(s, vtags)
 	local want
-  if visibility_strategy == 1 then
+  if visibility_strategy == VS_APPEND then
     want = awful.util.table.join(awful.tag.selectedlist(s), vtags)
-  elseif visibility_strategy == 2 then
+  elseif visibility_strategy == VS_NEW_ALL then
     want = vtags
-  elseif visibility_strategy == 3 then
+  elseif visibility_strategy == VS_NEW_FIRST then
     want = {vtags[1]}
-  elseif visibility_strategy == 4 then
+  elseif visibility_strategy == VS_NEW_LAST then
     want = {vtags[#vtags]}
-	elseif visibility_strategy == 5 then
+	elseif visibility_strategy == VS_SMALLEST then
 		local min = vtags[1]
 		for i, tag in ipairs(vtags) do
 			if #tag:clients() < #min:clients() then min = tag end
 		end
 		want = {min}
   end
-	local have = awful.tag.selectedlist(s)
-	for _, w in ipairs(want) do
-		for i, h in ipairs(have) do
-			if h == w then return end
-		end
-	end
 	awful.tag.viewmore(want, s)
 end
 
-function tagnames( c )
-  names = {}
-  selected = {}
-	-- find matches
-	for _, r in ipairs(awful.rules.rules) do
-		if r.properties.tagname and awful.rules.match(c, r.rule) then
-			if r.properties.switchtotag then
-				selected[r.properties.tagname] = true
-			end
-			if r.properties.exclusive then
-				names = {r.properties.tagname}
-				if r.properties.switchtotag then selected = {r.properties.tagname}
-				else selected = {} end
+function manage(c)
+  local tags, vtags = tagtables(c)
+	-- Check if tags actually changed
+	for _, new_tag in ipairs(tags) do
+		local found = false
+		for _, old_tag in ipairs(c:tags()) do
+			if new_tag == old_tag then 
+				found = true 
 				break
 			end
-			names[#names + 1] = r.properties.tagname
+		end
+
+		if not found then 
+			c:tags(tags)
+			settags(get_screen(c), vtags)
+			break
 		end
 	end
-  return names, selected
 end
 
-function tagorder_comparator( a, b )
-	local a = a.name
-	local b = b.name
-	local ia, ib
-	local retv = true
-	for i, name in ipairs(start_tags) do
-		if name == a then ia = i 
-		elseif name == b then ib = i end
-	end
-
-	if not ia and not ib then 
-		-- invert the return so that end_tags come after unspecified tags
-		retv = not retv 
-		for i, name in ipairs(end_tags) do
-			if name == a then ia = i end
-			if name == b then ib = i end
-		end
-	end 
-	-- both tags found in same table, order according to indices
-	if ia and ib then retv = (ia < ib) 
-	-- neither tag found in either table, order alphabetically
-	elseif not ia and not ib then retv = (a < b) 
-	-- found first tag and not the second, invert the return (false for start_tag, true for end_tag)
-	elseif ib and not ia then retv = not retv 
-	end
-	return retv
-end
-
-function maketag( name, s )
-	local tags = tags[s]
-	local t = tag({ name = name }) 
-
-	if 		 layouts[name] 			then awful.layout.set(layouts[name][1], t)
-	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
-	else 	 awful.layout.set(layouts[1], t) end
-
-	table.insert(tags, t)
-	table.sort(tags, tagorder_comparator)
-	screen[s]:tags(tags)
-	return t
-end
-
-function cleanup(c)
-	local s = get_screen(c)
-	local tags = tags[s]
-	
-	local selected = {}
-
-	local removed = {}
-	for i, t in ipairs(tags) do
-		if del(t) then
-			table.remove(tags, i)
-		end
-	end
-
-	if not awful.tag.selected(s) then
-		awful.tag.history.restore()
-	end
-end
-
-function del(t)
-	-- return if tag not empty (except sticky)
-	local clients = t:clients()
-	if #clients > 0 then
-		for i, c in ipairs(clients) do
-			if not c.sticky then 
-				return false 
-			end
-		end
-	end
-
-	-- remove tag
-	t.screen = nil
-	return true
-end
-
-client.add_signal("manage", function(c)
-  local tags, vtags = tagtables(c)
-  c:tags(tags)
-	viewtags(get_screen(c), vtags)
-end)
+client.add_signal("manage", manage)
 
 client.add_signal("unmanage", function(c)
 	prev_names[c] = nil
-	cleanup(c)
+	cleanup()
 end)
 
 if tag_on_rename then
 	prev_names = {}
 	client.add_signal("manage", function(c)
 		c:add_signal("property::name", function(c)
-      if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then
-        return
-      elseif c.name ~= prev_names[c] then
-				local f = client.focus
-				prev_names[c] = c.name
-        local tags, vtags = tagtables(c)
-        c:tags(tags)
-				viewtags(get_screen(c), vtags)
-				cleanup(c)
-				-- Restore focus
-				client.focus = f
-			end
+      if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then return end
+			local f = client.focus
+			prev_names[c] = c.name
+			manage(c)
+			cleanup()
+			-- Restore focus
+			client.focus = f
 		end)
 	end)
 end
