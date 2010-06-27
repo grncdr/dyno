@@ -2,7 +2,6 @@ local table = table
 local pairs = pairs
 local ipairs = ipairs
 local type = type
-local print = print
 
 local client = client
 local mouse = mouse
@@ -12,6 +11,10 @@ local tag = tag
 local layouts = layouts
 local awful = require('awful')
 require('awful.rules')
+require('naughty')
+local print = function(msg)
+	naughty.notify({title="Dyno says", text=msg, timeout=0})
+end
 
 module('dyno')
 
@@ -208,7 +211,6 @@ function tagtables(c)
 		-- Add the tags in selected to vtags
 		if selected[name] then vtags[#vtags + 1] = newtags[i] end
 	end
-	if #vtags == 0 then print "No visible tags being returned, you should either set switchtotag to true in (most of) your awful rules, or set alway_switch back to true in dyno/init.lua" end
   return newtags, vtags
 end
 
@@ -248,6 +250,10 @@ function manage(c)
 		if not found then 
 			c:tags(tags)
 			settags(get_screen(c), vtags)
+			local stags = awful.tag.selectedlist(s)
+			if #stags == 0 then print("No visible tags after managing client <b>'" .. c.name ..
+				"'</b>\nEither add 'switchtotag = true' to (most of) your awful rules, \nor set 'always_switch' back to true in dyno/init.lua")
+			end
 			break
 		end
 	end
