@@ -59,8 +59,9 @@ visibility_strategy = VS_SMALLEST
 -- an awful matching rule to automatically retag only matching clients
 tag_on_rename = { class = "XTerm" }
 
--- These two tables determine tag order, with any un-matched tags being 
--- sandwiched in the middle. Do not put the same tagname in both tables!
+-- A set of left/right taglists for each screen. These two tables determine 
+-- tag order, with any un-matched tags being sandwiched in the middle. 
+-- Only the first occurrence of a tag is ever used
 screen_tags = {
 	{
 		left = {'web', },
@@ -141,23 +142,27 @@ local function tagnames( c )
 end
 
 
-local function newtag( name )
-	local function findscreen()
-		for s = 1, #screen_tags do 
-			for _, tag in ipairs(screen_tags[s]['left']) do
-				if tag == name then return s end
-			end
+local function findscreen()
+	for s = 1, #screen_tags do 
+		for _, tag in ipairs(screen_tags[s]['left']) do
+			if tag == name then return s end
 		end
-		if client.focus ~= nil then
-			return client.focus.screen -- Tag not found
-		else
-			return 1
+		for _, tag in ipairs(screen_tags[s]['right']) do
+			if tag == name then return s end
 		end
 	end
+	if client.focus ~= nil then
+		return client.focus.screen -- Tag not found
+	else
+		return 1
+	end
+end
 
-	s = findscreen()
+local function newtag( name )
+	local s = findscreen(name)
 
-	local t = tag({ name = name, screen = s }) 
+	local t = tag({ name = name }) 
+	t.screen = s
 
 	if 		 layouts[name] 			then awful.layout.set(layouts[name][1], t)
 	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
