@@ -64,7 +64,7 @@ end_tags = { 'ssh', 'sys', 'term' }
 
 -- Map a specific tag name (and any client that matches it) to a given screen
 tag_to_screen = {
-	web = 1, term = 2
+	web = 1, term = 2, email = 1, code = 2
 }
 
 -- END CONFIGURATION }}}
@@ -73,11 +73,13 @@ tag_to_screen = {
 function prompt()
 	awful.prompt.run({prompt = 'Tag: '}, G.mypromptbox[mouse.screen].widget, 
 	function (tagname)
-		local s = client.focus.screen
-		for _, t in ipairs(screen[s]:tags()) do
-			if t.name == tagname then
-				awful.tag.viewmore({t})
-				break
+		for s = 1, screen.count() do
+			for _, t in ipairs(screen[s]:tags()) do
+				if t.name == tagname then
+					awful.tag.viewonly(t)
+					awful.screen.focus(s)
+					break
+				end
 			end
 		end
 	end,
@@ -85,7 +87,7 @@ function prompt()
 		local matches = {}
 		for s = 1, screen.count() do
 			for _, t in ipairs(screen[s]:tags()) do
-				if t.name:match(input) ~= nil then
+				if t.name:match('^' .. input) ~= nil then
 					matches[#matches+1] = t.name
 				end
 			end
@@ -234,6 +236,37 @@ local function tagtables(c)
 		else newtags = { c.class:lower() } end --Generate tags based on window class
 	end
 
+	local screen_tags = {}
+	for _, name in ipairs(newtags) do
+		local tag_screen = tag_to_screen[name]
+		if tag_screen ~= nil then 
+			if screen_tags[tag_screen] == nil then
+				screen_tags[tag_screen] = {name}
+			else
+				table.insert(screen_tags[tag_screen], name)
+			end
+		end
+	end
+
+	if #screen_tags > 1 then -- Conflicting screens!
+		local max_index = 1
+		for i = 2, #screen_tags do 
+			if #screen_tags[i] > #screen_tags[max_index] then
+				max_index = i
+			end
+		end
+
+		msg = "Cannot tag client '"..c.name.."' properly because tag screens conflict:\n"
+		for screen, tags in pairs(screen_tags) do
+			for _, tag in ipairs(tags) do 
+				msg = msg .. tag .. '=' .. screen .. '\n'
+			end
+		end
+		msg = '\n Choosing screen ' .. max_index
+		newtags = screen_tags[max_index]
+		c.screen = tags[max_index]
+	end
+
 	local vtags = {}
 	-- go through newtags table and replace strings with tag objects
 	for i, name in ipairs(newtags) do
@@ -252,7 +285,7 @@ local function tagtables(c)
 		
 		-- Didn't find an existing matching tag, so make one
 		if type(newtags[i]) == 'string' then
-			newtags[i] = newtag( name, s )
+			newtags[i] = newtag( name )
 			-- The check to select_these[name] is necessary to avoid adding the tag to vtags 2x
 			if show_new_tags and not select_these[name] then
 				vtags[#vtags + 1] = newtags[i]
@@ -262,6 +295,7 @@ local function tagtables(c)
 		-- Add the tags in select_these to vtags
 		if select_these[name] then vtags[#vtags + 1] = newtags[i] end
 	end
+
   return newtags, vtags
 end
 
@@ -290,7 +324,6 @@ end
 function manage(c)
 	-- print("Manage " .. c.name)
   local ctags, vtags = tagtables(c)
-	-- Check if ctags actually changed
 	c:tags(ctags)
 	settags(get_screen(c), vtags)
 	local selected = awful.tag.selectedlist(s)
