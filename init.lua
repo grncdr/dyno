@@ -14,11 +14,12 @@ local tags = tags
 local tag = tag
 local layouts = layouts
 local awful = require('awful')
+local G = getfenv(1)
 require('awful.rules')
 require('awful.util')
 require('naughty')
 local print = function(msg)
-	naughty.notify({title="Dyno says", text=msg, timeout=0})
+	naughty.notify({title="Dyno says", text=msg, timeout=15})
 end
 -- }}}
 
@@ -62,15 +63,9 @@ tag_on_rename = { class = "XTerm" }
 -- A set of left/right taglists for each screen. These two tables determine 
 -- tag order, with any un-matched tags being sandwiched in the middle. 
 -- Only the first occurrence of a tag is ever used
-screen_tags = {
-	{
-		left = {'web', },
-		right = { },
-	},
-	{
-		left = {'code', 'ssh', },
-		right = { 'sys', 'term' },
-	},
+tag_order = {
+	left = {'web', 'code', 'ssh',},
+	right = { 'sys', 'term' },
 }
 
 -- END CONFIGURATION }}}
@@ -118,6 +113,9 @@ local function get_screen(obj)
 	return (obj and obj.screen) or mouse.screen or 1
 end
 
+-- Match the client against awful rules and return two lists:
+--   Tag names that the client should be tagged with
+--   Tags that should be selected (according to switchtotag)
 local function tagnames( c )
   local names = {}
   local select_these = {}
@@ -143,47 +141,43 @@ end
 
 
 local function findscreen()
-	for s = 1, #screen_tags do 
-		for _, tag in ipairs(screen_tags[s]['left']) do
-			if tag == name then return s end
-		end
-		for _, tag in ipairs(screen_tags[s]['right']) do
-			if tag == name then return s end
-		end
+	for _, tag in ipairs(screen_tags['left']) do
+		if tag == name then return s end
+	end
+	for _, tag in ipairs(screen_tags['right']) do
+		if tag == name then return s end
 	end
 	if client.focus ~= nil then
 		return client.focus.screen -- Tag not found
 	else
-		return 1
+		return mouse.screen
 	end
 end
 
-local function newtag( name )
-	local s = findscreen(name)
-
+local function newtag( name, s )
 	local t = tag({ name = name }) 
-	t.screen = s
 
 	if 		 layouts[name] 			then awful.layout.set(layouts[name][1], t)
 	elseif layouts['default'] then awful.layout.set(layouts['default'][1], t)
 	else 	 awful.layout.set(layouts[1], t) end
 
-	table.insert(tags[s], t)
-	table.sort(tags[s], function ( a, b )
+	local tags = screen[s]:tags()
+	table.insert(tags, t)
+	table.sort(tags, function ( a, b )
 		local a = a.name
 		local b = b.name
 		local ia, ib
 		local retv = true
-		for i, name in ipairs(screen_tags[s]['left']) do
+		for i, name in ipairs(tag_order['left']) do
 			if name == a then ia = i 
 			elseif name == b then ib = i end
 		end
 
 		if not ia and not ib then 
 			-- Neither tag is in left, search right
-			-- invert the return so that right come after unspecified tags
+			-- invert the return so that tags on the right come after unspecified tags
 			retv = not retv 
-			for i, name in ipairs(screen_tags[s]['right']) do
+			for i, name in ipairs(tag_order['right']) do
 				if name == a then ia = i end
 				if name == b then ib = i end
 			end
@@ -196,12 +190,12 @@ local function newtag( name )
 		elseif ib and not ia then retv = not retv end
 		return retv
 	end)
-	screen[s]:tags(tags[s])
+	screen[s]:tags(tags)
 	return t
 end
 
--- Meat of the module, takes a client as it's argument and sets it's tags 
--- according to the tagname property in any matching awful rule
+-- 
+--
 local function tagtables(c)
 	local newtags, select_these = tagnames(c)
 
@@ -217,67 +211,63 @@ local function tagtables(c)
 	end
 
 
-	local screen_counts = {0, 0, 0, 0, 0, 0} -- Six screens are enough for now!
+	local tscreen = nil
 	local vtags = {}
+	print("Tagging " .. c.name)
 	-- go through newtags table and replace strings with tag objects
 	for i, name in ipairs(newtags) do
 		-- Don't do anything for the 'any' tag
 		if name == 'any' then break end
 
+		print("Tagname: "..name)
 		-- Search tags for existing matches
 		for s = 1, screen.count() do
-			table.foreach(screen[s]:tags(), function(t)
+			for _, t in pairs(screen[s]:tags()) do
+				print("Checking " .. name .. " against " .. t.name)
 				if t.name == name then
+					print(t.name .. "==" .. name)
 					newtags[i] = t
-					return
+					tscreen = s
+					break
 				end
-			end)
+			end
 		end
 		
 		-- Didn't find an existing matching tag, so make one
 		if type(newtags[i]) == 'string' then
-			newtags[i] = newtag( name )
+			if s == nil then
+				s = client.focus and client.focus.screen or mouse.screen
+			end
+			newtags[i] = newtag( name, s )
 			-- The check to select_these[name] is necessary to avoid adding the tag to vtags 2x
 			if show_new_tags and not select_these[name] then
 				table.insert(vtags, newtags[i])
 			end
 		end
 
-		local s = newtags[i].screen
-		screen_counts[s] = screen_counts[s] + 1
-		
 		-- Add the tags in select_these to vtags
 		if select_these[name] then vtags[#vtags + 1] = newtags[i] end
 	end
 	
-	local s = 1
-	if #screen_counts > 1 then
-		for i, count in pairs(screen_counts) do
-			if count > screen_counts[s] then
-				s = i
-			end
-		end
-	end
-	
 	rtags = {}
-	table.foreach(newtags, function(t)
+	for _, t in pairs(newtags) do
 		if t.screen == s then
 			table.insert(rtags, t)
 		end
-	end)
+	end
 
 	rvtags = {}
-	table.foreach(vtags, function(t)
+	for n, t in pairs(vtags) do
 		if t.screen == s then
 			table.insert(rvtags, t)
 		end
-	end)
+	end
 
   return rtags, rvtags
 end
 
 -- Set the visible tags according to the selected visibility strategy
-local function settags(s, vtags)
+local function viewtags(s, vtags)
 	local want
   if visibility_strategy == VS_APPEND then
     want = awful.util.table.join(awful.tag.selectedlist(s), vtags)
@@ -304,7 +294,8 @@ local function cleanup()
 		local selected = {}
 		local removed = {}
 
-		for i, t in ipairs(tags[s]) do
+		local tags = screen[s]:tags() 
+		for n, t in pairs(tags) do
 			local clients = t:clients()
 			local delete_me = true
 			for i, c in ipairs(clients) do
@@ -320,6 +311,7 @@ local function cleanup()
 			end
 		end
 
+		screen[s]:tags(tags)
 		if not awful.tag.selected(s) then
 			awful.tag.history.restore()
 		end
@@ -331,13 +323,10 @@ function manage(c)
 	-- print("Manage " .. c.name)
   local ctags, vtags = tagtables(c)
 	local focus = client.focus
-	local s = client.screen
 	c:tags(ctags)
-	print("Managing client <b>" .. c.name .. "</b>")
+	local s = client.screen
 	if c == focus and #vtags > 0 then
-		settags(s, vtags)
-	else
-		print("Managing unfocused client <b>" .. c.name .. "</b>, focused client is <b>" .. client.focus.name .. "</b>")
+		viewtags(s, vtags)
 	end
 	local selected = awful.tag.selectedlist(s)
 	if #selected == 0 then 
@@ -345,7 +334,8 @@ function manage(c)
 	end
 	local selected = awful.tag.selectedlist(s)
 	if #selected == 0 then 
-		awful.tag.viewnext(tags[s][1])
+		print("No tags selected!")
+		awful.tag.viewnext(s)
 	end
 end
 -- }}}
@@ -354,13 +344,62 @@ end
 
 -- Clear tag tables
 for s = 1, screen.count() do
-	tags[s] = awful.tag({}, s, layouts[1])
+	tags[s] = nil
+	screen[s]:tags({})
 end
 
-globalkeys = awful.util.table.join(globalkeys,
+local function get_screen()
+	local s
+	if client.focus then
+		s = client.focus.screen
+	else
+		s = mouse.screen
+	end
+	return screen[s]
+end
+
+local function get_tags()
+	return get_screen():tags()
+end
+
+for i = 1, 9 do
+	G.globalkeys = awful.util.table.join(G.globalkeys,
+		awful.key({ modkey }, "#" .. i + 9,
+			function ()
+				local tags = get_tags()
+				if tags[i] then
+					awful.tag.viewonly(tags[i])
+				end
+			end),
+		awful.key({ modkey, "Control" }, "#" .. i + 9,
+			function ()
+				local tags = get_tags()
+				if tags[i] then
+					awful.tag.viewtoggle(tags[i])
+				end
+			end),
+		awful.key({ modkey, "Shift" }, "#" .. i + 9,
+			function ()
+				local tags = get_tags()
+				if client.focus and tags[i] then
+					awful.client.movetotag(tags[i])
+				end
+			end),
+		awful.key({ modkey, "Control", "Shift" }, "#" .. i + 9,
+			function ()
+				local tags = get_tags()
+				if client.focus and tags[i] then
+					awful.client.toggletag(tags[i])
+				end
+			end)
+	)
+end
+
+G.globalkeys = awful.util.table.join(G.globalkeys,
 	awful.key({ modkey }, "t", prompt)
 )
 
+local prev_names = {}
 client.add_signal("manage", manage)
 
 client.add_signal("unmanage", function(c)
@@ -369,12 +408,13 @@ client.add_signal("unmanage", function(c)
 end)
 
 if tag_on_rename then
-	prev_names = {}
 	client.add_signal("manage", function(c)
 		c:add_signal("property::name", function(c)
       if tag_on_rename ~= true and not awful.rules.match(c, tag_on_rename) then return end
-			if c.name == prev_names[c] then return end
-			prev_names[c] = c.name
+			if c.prev_name ~= nil or c.name == c.prev_name then return end
+			-- if c.name == prev_names[c] then return end
+			c.prev_name = c.name
+			-- prev_names[c] = c.name
 			manage(c)
 			cleanup()
 		end)
