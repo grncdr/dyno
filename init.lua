@@ -273,7 +273,7 @@ local function cleanup()
 		local removed = {}
 
 		local tags = screen[s]:tags() 
-		for n, t in pairs(tags) do
+		for i, t in ipairs(tags) do
 			local clients = t:clients()
 			local delete_me = true
 			for i, c in ipairs(clients) do
@@ -288,8 +288,8 @@ local function cleanup()
 				table.remove(tags, i)
 			end
 		end
-
 		screen[s]:tags(tags)
+
 		if not awful.tag.selected(s) then
 			awful.tag.history.restore()
 		end
