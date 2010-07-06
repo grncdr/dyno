@@ -15,6 +15,7 @@ local tag = tag
 local layouts = layouts
 local awful = require('awful')
 local G = getfenv(1)
+local get_screen = get_screen
 require('awful.rules')
 require('awful.util')
 require('naughty')
@@ -71,16 +72,16 @@ tag_order = {
 -- END CONFIGURATION }}}
 
 -- {{{ PROMPT FUNCTION
-function prompt()
-	awful.prompt.run({prompt = 'Tag: '}, mypromptbox[client.focus.screen].widget, 
+local function dyno_prompt()
+	awful.prompt.run({prompt = 'Tag: '}, mypromptbox[get_screen()].widget, 
 	function (tagname)
-		for s = 1, screen.count() do
-			for _, t in ipairs(screen[s]:tags()) do
-				if t.name == tagname then
-					awful.tag.viewonly(t)
-					awful.screen.focus(s)
-					break
-				end
+		local name, s = tagname:match('(%a+) {(%d+)}')
+		s = 0 + s -- Attempt to convert back to number
+		for _, t in ipairs(screen[s]:tags()) do
+			if t.name == name then
+				awful.tag.viewonly(t, s)
+				awful.screen.focus(s)
+				break
 			end
 		end
 	end,
@@ -88,8 +89,8 @@ function prompt()
 		local matches = {}
 		for s = 1, screen.count() do
 			for _, t in ipairs(screen[s]:tags()) do
-				if t.name:match('^' .. input) ~= nil then
-					matches[#matches+1] = t.name
+				if t.name:match('^' .. input) then
+					matches[#matches+1] = t.name .. ' {' .. t.screen .. '}'
 				end
 			end
 		end
@@ -107,11 +108,6 @@ end
 -- }}}
 
 -- {{{ TAGGING FUNCTIONS
-
--- Small utility function that will always return a screen #
-local function get_screen(obj)
-	return (obj and obj.screen) or mouse.screen or 1
-end
 
 -- Match the client against awful rules and return two lists:
 --   Tag names that the client should be tagged with
@@ -198,6 +194,13 @@ end
 --
 local function tagtables(c)
 	local newtags, select_these = tagnames(c)
+	
+	local s
+	if c.screen then
+		s = c.screen
+	else 
+		s = get_screen()
+	end
 
 	-- If only match is 'any' tag, then don't retag the client
 	if #newtags == 1 and newtags[1] == 'any' then
@@ -211,33 +214,22 @@ local function tagtables(c)
 	end
 
 
-	local tscreen = nil
 	local vtags = {}
-	print("Tagging " .. c.name)
 	-- go through newtags table and replace strings with tag objects
 	for i, name in ipairs(newtags) do
 		-- Don't do anything for the 'any' tag
 		if name == 'any' then break end
 
-		print("Tagname: "..name)
 		-- Search tags for existing matches
-		for s = 1, screen.count() do
-			for _, t in pairs(screen[s]:tags()) do
-				print("Checking " .. name .. " against " .. t.name)
-				if t.name == name then
-					print(t.name .. "==" .. name)
-					newtags[i] = t
-					tscreen = s
-					break
-				end
+		for _, t in pairs(screen[s]:tags()) do
+			if t.name == name then
+				newtags[i] = t
+				break
 			end
 		end
 		
 		-- Didn't find an existing matching tag, so make one
 		if type(newtags[i]) == 'string' then
-			if s == nil then
-				s = client.focus and client.focus.screen or mouse.screen
-			end
 			newtags[i] = newtag( name, s )
 			-- The check to select_these[name] is necessary to avoid adding the tag to vtags 2x
 			if show_new_tags and not select_these[name] then
@@ -249,25 +241,11 @@ local function tagtables(c)
 		if select_these[name] then vtags[#vtags + 1] = newtags[i] end
 	end
 	
-	rtags = {}
-	for _, t in pairs(newtags) do
-		if t.screen == s then
-			table.insert(rtags, t)
-		end
-	end
-
-	rvtags = {}
-	for n, t in pairs(vtags) do
-		if t.screen == s then
-			table.insert(rvtags, t)
-		end
-	end
-
-  return rtags, rvtags
+  return newtags, vtags
 end
 
 -- Set the visible tags according to the selected visibility strategy
-local function viewtags(s, vtags)
+local function viewtags(vtags, s)
 	local want
   if visibility_strategy == VS_APPEND then
     want = awful.util.table.join(awful.tag.selectedlist(s), vtags)
@@ -320,13 +298,12 @@ end
 
 -- Publically visible manage signal callback
 function manage(c)
-	-- print("Manage " .. c.name)
-  local ctags, vtags = tagtables(c)
 	local focus = client.focus
+  local ctags, vtags = tagtables(c)
 	c:tags(ctags)
-	local s = client.screen
+	local s = client.screen or get_screen()
 	if c == focus and #vtags > 0 then
-		viewtags(s, vtags)
+		viewtags(vtags, s)
 	end
 	local selected = awful.tag.selectedlist(s)
 	if #selected == 0 then 
@@ -334,8 +311,7 @@ function manage(c)
 	end
 	local selected = awful.tag.selectedlist(s)
 	if #selected == 0 then 
-		print("No tags selected!")
-		awful.tag.viewnext(s)
+		awful.tag.viewnext(screen[s])
 	end
 end
 -- }}}
@@ -348,18 +324,8 @@ for s = 1, screen.count() do
 	screen[s]:tags({})
 end
 
-local function get_screen()
-	local s
-	if client.focus then
-		s = client.focus.screen
-	else
-		s = mouse.screen
-	end
-	return screen[s]
-end
-
 local function get_tags()
-	return get_screen():tags()
+	return screen[get_screen()]:tags()
 end
 
 for i = 1, 9 do
@@ -396,7 +362,7 @@ for i = 1, 9 do
 end
 
 G.globalkeys = awful.util.table.join(G.globalkeys,
-	awful.key({ modkey }, "t", prompt)
+	awful.key({ modkey }, "t", dyno_prompt)
 )
 
 local prev_names = {}
